@@ -1,9 +1,14 @@
+from django.db.models import Q
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import (
+    AccessRole,
     Organization,
     OrganizationMember,
     Event,
+    Group,
+    GroupMember,
     Household,
     HouseholdMember,
     AttendanceSession,
@@ -23,6 +28,8 @@ from .serializers import (
     OrganizationSerializer,
     OrganizationMemberSerializer,
     EventSerializer,
+    GroupSerializer,
+    GroupMemberSerializer,
     HouseholdSerializer,
     HouseholdMemberSerializer,
     AttendanceSessionSerializer,
@@ -48,6 +55,34 @@ class OrganizationScopedQuerySetMixin:
         return self.queryset.filter(**{lookup: self.request.user}).distinct()
 
 
+ORG_MANAGE_ROLES = {
+    AccessRole.OWNER,
+    AccessRole.ORGANIZATION_ADMIN,
+    AccessRole.MANAGER,
+}
+
+
+def get_org_membership(organization, user):
+    return organization.members.filter(user=user, membership_status="active").first()
+
+
+def can_manage_organization(organization, user):
+    membership = get_org_membership(organization, user)
+    return membership is not None and membership.role in ORG_MANAGE_ROLES
+
+
+def can_manage_group_members(group, user):
+    if can_manage_organization(group.organization, user):
+        return True
+    if group.leader_id == user.id:
+        return True
+    return group.members.filter(
+        user=user,
+        membership_status="active",
+        role=AccessRole.GROUP_LEADER,
+    ).exists()
+
+
 class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
     filter_backends = [DjangoFilterBackend]
@@ -71,11 +106,13 @@ class OrganizationMemberViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return OrganizationMember.objects.filter(
             organization_id=self.kwargs["org_pk"]
-        )
+        ).filter(organization__members__user=self.request.user).distinct()
 
     def perform_create(self, serializer):
         from apps.organizations.models import Organization
         org = Organization.objects.get(pk=self.kwargs["org_pk"])
+        if not can_manage_organization(org, self.request.user):
+            raise PermissionDenied("You do not have permission to manage organization members.")
         serializer.save(organization=org, invited_by=self.request.user)
 
 
@@ -85,8 +122,53 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Event.objects.filter(
-            organization__members__user=self.request.user
+            Q(organization__members__user=self.request.user)
+            | Q(organization__isnull=True)
+            | Q(created_by=self.request.user)
         ).distinct()
+
+    def perform_create(self, serializer):
+        organization = serializer.validated_data.get("organization")
+        if organization and not can_manage_organization(organization, self.request.user):
+            raise PermissionDenied("You do not have permission to manage events for this organization.")
+        serializer.save(created_by=self.request.user)
+
+
+class GroupViewSet(viewsets.ModelViewSet):
+    serializer_class = GroupSerializer
+    queryset = Group.objects.select_related("organization", "event", "leader")
+    filterset_fields = ["organization", "event", "group_type", "status"]
+
+    def get_queryset(self):
+        return self.queryset.filter(
+            organization__members__user=self.request.user
+        ).distinct().order_by("name", "created_at_server")
+
+    def perform_create(self, serializer):
+        organization = serializer.validated_data["organization"]
+        if not can_manage_organization(organization, self.request.user):
+            raise PermissionDenied("You do not have permission to manage groups for this organization.")
+        serializer.save()
+
+
+class GroupMemberViewSet(viewsets.ModelViewSet):
+    serializer_class = GroupMemberSerializer
+    queryset = GroupMember.objects.select_related("group", "user")
+    filterset_fields = ["group", "user", "role", "membership_status"]
+
+    def get_queryset(self):
+        return self.queryset.filter(
+            group__organization__members__user=self.request.user
+        ).distinct()
+
+    def perform_create(self, serializer):
+        group = serializer.validated_data["group"]
+        if not can_manage_group_members(group, self.request.user):
+            raise PermissionDenied("You do not have permission to manage this group.")
+        group_member = serializer.save(added_by=self.request.user)
+        if group_member.role == AccessRole.GROUP_LEADER and group.leader_id != group_member.user_id:
+            group.leader_id = group_member.user_id
+            group.save(update_fields=["leader"])
 
 
 class HouseholdViewSet(OrganizationScopedQuerySetMixin, viewsets.ModelViewSet):

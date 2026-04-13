@@ -15,6 +15,8 @@ from .models import OTP, User, UserDevice
 from .serializers import (
     OTPRequestSerializer,
     OTPVerifySerializer,
+    RegistrationSerializer,
+    PasswordLoginSerializer,
     UserSerializer,
     UserDeviceSerializer,
 )
@@ -35,11 +37,11 @@ class OTPRequestView(APIView):
     def post(self, request):
         ser = OTPRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        phone = ser.validated_data["phone"]
+        phone_number = ser.validated_data["phone_number"]
 
         code = _generate_otp()
         OTP.objects.create(
-            phone=phone,
+            phone=phone_number,
             code=code,
             expires_at=timezone.now() + timedelta(minutes=10),
         )
@@ -47,7 +49,7 @@ class OTPRequestView(APIView):
         # TODO: integrate real SMS gateway (Twilio / local)
         # sms_service.send(phone, f"Your Door OTP: {code}")
 
-        logger.info("DEV OTP for %s is %s", phone, code)
+        logger.info("DEV OTP for %s is %s", phone_number, code)
         payload = {"ok": True, "message": "OTP sent."}
         if settings.DEBUG:
             payload["otp_code"] = code
@@ -60,24 +62,28 @@ class OTPVerifyView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        phone = request.data.get("phone", "")
+        phone_number = (request.data.get("phone_number") or request.data.get("phone") or "").strip()
         if settings.BYPASS_OTP_VERIFICATION:
-            if not phone:
-                return Response({"detail": "phone is required."}, status=status.HTTP_400_BAD_REQUEST)
+            if not phone_number:
+                return Response({"detail": "phone_number is required."}, status=status.HTTP_400_BAD_REQUEST)
             otp = None
         else:
             ser = OTPVerifySerializer(data=request.data)
             ser.is_valid(raise_exception=True)
             otp = ser.validated_data["otp"]
-            phone = otp.phone
+            phone_number = otp.phone
             otp.used = True
             otp.save(update_fields=["used"])
 
-        user, created = User.objects.get_or_create(
-            phone=phone,
-            defaults={"is_phone_verified": True},
-        )
-        if not created and not user.is_phone_verified:
+        try:
+            user = User.objects.get(phone_number=phone_number)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "No account exists for this phone number. Register with email, phone number, and password first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.is_phone_verified:
             user.is_phone_verified = True
             user.save(update_fields=["is_phone_verified"])
 
@@ -88,7 +94,45 @@ class OTPVerifyView(APIView):
                 "access": str(refresh.access_token),
                 "refresh": str(refresh),
                 "user_id": str(user.id),
-                "is_new_user": created,
+                "is_new_user": False,
+            }
+        )
+
+
+class RegisterView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = RegistrationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "ok": True,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(user).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PasswordLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PasswordLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        user.mark_seen()
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "ok": True,
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": UserSerializer(user).data,
             }
         )
 

@@ -62,6 +62,8 @@ def send_broadcast_message(self, message_id: str):
                 "event": "broadcast.message",
                 "data": {
                     "id": str(msg.id),
+                    "channel_id": str(msg.channel_id),
+                    "interaction_id": str(msg.interaction_id) if msg.interaction_id else None,
                     "title": msg.title,
                     "body": msg.body,
                     "type": msg.type,

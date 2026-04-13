@@ -1,13 +1,255 @@
 import uuid
 import qrcode
 import io
+import secrets
 from django.db import models
 from django.db.models import Q
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
+from django.utils.text import slugify
 
 from common.models import SoftDeleteModel
+class InteractionTemplate(SoftDeleteModel):
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=64, db_index=True)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=64, blank=True)
+    default_language = models.CharField(max_length=12, default="en")
+    is_public = models.BooleanField(default=False, db_index=True)
+    supports_offline = models.BooleanField(default=False)
+    version = models.PositiveIntegerField(default=1)
+    schema_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "qr_interaction_templates"
+        indexes = [
+            models.Index(fields=["category", "is_public"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+
+class TemplateField(SoftDeleteModel):
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.CASCADE,
+        related_name="fields",
+    )
+    field_key = models.CharField(max_length=100)
+    label = models.CharField(max_length=255)
+    field_type = models.CharField(max_length=50)
+    is_required = models.BooleanField(default=False)
+    default_value = models.JSONField(default=dict, blank=True)
+    options_json = models.JSONField(default=dict, blank=True)
+    validation_json = models.JSONField(default=dict, blank=True)
+    visibility_rule_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "qr_template_fields"
+        unique_together = [("template", "field_key")]
+        indexes = [
+            models.Index(fields=["template", "field_key"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"{self.template.name}:{self.field_key}"
+
+
+class TemplateWorkflowState(SoftDeleteModel):
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.CASCADE,
+        related_name="workflow_states",
+    )
+    state_name = models.CharField(max_length=100)
+    state_type = models.CharField(max_length=50, db_index=True)
+    order = models.PositiveIntegerField(default=1)
+    color = models.CharField(max_length=32, blank=True)
+    is_initial = models.BooleanField(default=False)
+    is_final = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "qr_template_workflow_states"
+        ordering = ["order", "created_at_server"]
+        indexes = [
+            models.Index(fields=["template", "order"]),
+            models.Index(fields=["template", "state_type"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"{self.template.name}:{self.state_name}"
+
+
+class TemplateAction(SoftDeleteModel):
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.CASCADE,
+        related_name="actions",
+    )
+    action_name = models.CharField(max_length=100)
+    action_key = models.CharField(max_length=100)
+    source_state = models.ForeignKey(
+        TemplateWorkflowState,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="outgoing_actions",
+    )
+    target_state = models.ForeignKey(
+        TemplateWorkflowState,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="incoming_actions",
+    )
+    role_required = models.CharField(max_length=50, blank=True)
+    button_style = models.CharField(max_length=50, blank=True)
+    action_config_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "qr_template_actions"
+        unique_together = [("template", "action_key")]
+        indexes = [
+            models.Index(fields=["template", "action_key"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"{self.template.name}:{self.action_key}"
+
+
+class NotificationRule(SoftDeleteModel):
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.CASCADE,
+        related_name="notification_rules",
+    )
+    trigger_event = models.CharField(max_length=100, db_index=True)
+    audience_type = models.CharField(max_length=50, db_index=True)
+    audience_config = models.JSONField(default=dict, blank=True)
+    channel = models.CharField(max_length=30)
+    priority = models.CharField(max_length=30, default="normal")
+    fallback_rule_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "qr_notification_rules"
+        indexes = [
+            models.Index(fields=["template", "trigger_event"]),
+            models.Index(fields=["audience_type", "channel"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"{self.template.name}:{self.trigger_event}:{self.channel}"
+
+
+class InteractionRecord(SoftDeleteModel):
+    STATUS_CHOICES = [
+        ("open", "Open"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+        ("failed", "Failed"),
+    ]
+
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.PROTECT,
+        related_name="interaction_records",
+    )
+    qr_entity = models.ForeignKey(
+        "qr_engine.QRCode",
+        on_delete=models.CASCADE,
+        related_name="interaction_records",
+        db_column="qr_entity_id",
+    )
+    scan = models.OneToOneField(
+        "qr_engine.QRScan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interaction_record",
+    )
+    initiated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="initiated_interactions",
+    )
+    initiated_at = models.DateTimeField(default=timezone.now, db_index=True)
+    current_state = models.ForeignKey(
+        TemplateWorkflowState,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interaction_records",
+    )
+    payload_json = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open", db_index=True)
+
+    class Meta:
+        db_table = "qr_interaction_records"
+        indexes = [
+            models.Index(fields=["template", "status"]),
+            models.Index(fields=["qr_entity", "initiated_at"]),
+            models.Index(fields=["initiated_by", "initiated_at"]),
+            models.Index(fields=["current_state"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"InteractionRecord({self.template_id}, {self.status})"
+
+
+class InteractionAuditLog(SoftDeleteModel):
+    interaction = models.ForeignKey(
+        InteractionRecord,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interaction_audit_logs",
+    )
+    action = models.CharField(max_length=100, db_index=True)
+    from_state = models.ForeignKey(
+        TemplateWorkflowState,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs_from",
+    )
+    to_state = models.ForeignKey(
+        TemplateWorkflowState,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_logs_to",
+    )
+    snapshot_json = models.JSONField(default=dict, blank=True)
+    device_id = models.CharField(max_length=128, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "qr_interaction_audit_logs"
+        ordering = ["created_at_server"]
+        indexes = [
+            models.Index(fields=["interaction", "created_at_server"]),
+            models.Index(fields=["actor", "created_at_server"]),
+            models.Index(fields=["action", "created_at_server"]),
+            models.Index(fields=["updated_at_server"]),
+        ]
+
+    def __str__(self):
+        return f"InteractionAuditLog({self.interaction_id}, {self.action})"
 
 
 class QRCode(SoftDeleteModel):
@@ -60,10 +302,22 @@ class QRCode(SoftDeleteModel):
     )
 
     label = models.CharField(max_length=255)
+    owner_type = models.CharField(max_length=50, blank=True, db_index=True)
+    owner_id = models.CharField(max_length=100, blank=True, db_index=True)
+    template = models.ForeignKey(
+        InteractionTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="qr_codes",
+    )
+    purpose = models.CharField(max_length=100, blank=True, db_index=True)
+    qr_token = models.SlugField(max_length=120, unique=True, db_index=False)
     entity_type = models.CharField(max_length=20, choices=ENTITY_TYPE_CHOICES, db_index=True)
     mode = models.CharField(max_length=30, choices=MODE_CHOICES, db_index=True)
     action_payload = models.JSONField(default=dict, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    metadata_json = models.JSONField(default=dict, blank=True)
 
     # Backward-compatible payload fields (to be deprecated after serializers migration)
     payload_type = models.CharField(max_length=30, choices=MODE_CHOICES, default="custom_action")
@@ -89,6 +343,8 @@ class QRCode(SoftDeleteModel):
             models.Index(fields=["event"]),
             models.Index(fields=["group"]),
             models.Index(fields=["queue"]),
+            models.Index(fields=["owner_type", "owner_id"]),
+            models.Index(fields=["template", "purpose"]),
             models.Index(fields=["entity_type", "mode", "is_active"]),
             models.Index(fields=["expires_at"]),
             models.Index(fields=["updated_at_server"]),
@@ -104,6 +360,18 @@ class QRCode(SoftDeleteModel):
             self.payload_type = self.mode
         if self.action_payload and not self.payload_data:
             self.payload_data = self.action_payload
+        if self.metadata_json and not self.metadata:
+            self.metadata = self.metadata_json
+        if self.metadata and not self.metadata_json:
+            self.metadata_json = self.metadata
+        if self.template_id:
+            if not self.purpose:
+                self.purpose = self.template.category
+            if not self.owner_type:
+                self.owner_type = self.entity_type
+        if not self.qr_token:
+            base_slug = slugify(self.label) or "qr"
+            self.qr_token = f"{base_slug}-{secrets.token_hex(4)}"
 
         if not self.image:
             self._generate_image()
@@ -111,7 +379,7 @@ class QRCode(SoftDeleteModel):
 
     def _generate_image(self):
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
-        qr.add_data(str(self.id))
+        qr.add_data(self.qr_token or str(self.id))
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
         buffer = io.BytesIO()
@@ -154,6 +422,7 @@ class QRScan(SoftDeleteModel):
     metadata = models.JSONField(default=dict, blank=True)
     scan_source = models.CharField(max_length=20, choices=SCAN_SOURCE_CHOICES, default="camera")
     raw_content = models.TextField(blank=True)
+    template_snapshot = models.JSONField(default=dict, blank=True)
     location_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     location_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     scanned_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -175,6 +444,14 @@ class QRScan(SoftDeleteModel):
             self.mode = self.qr_code.mode
         if not self.action_payload:
             self.action_payload = self.qr_code.action_payload or self.qr_code.payload_data
+        if not self.template_snapshot and self.qr_code.template_id:
+            self.template_snapshot = {
+                "id": str(self.qr_code.template_id),
+                "name": self.qr_code.template.name,
+                "category": self.qr_code.template.category,
+                "version": self.qr_code.template.version,
+                "schema_json": self.qr_code.template.schema_json,
+            }
         super().save(*args, **kwargs)
 
 

@@ -9,6 +9,7 @@ class BroadcastService:
     def create_message(*, channel, sender, title, body, target_mode, payload=None, selected_users=None):
         msg = BroadcastMessage.objects.create(
             channel=channel,
+            interaction=getattr(channel, "interaction", None),
             sender=sender,
             title=title,
             body=body,

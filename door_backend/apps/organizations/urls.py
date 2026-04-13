@@ -5,6 +5,8 @@ from .views import (
     OrganizationViewSet,
     OrganizationMemberViewSet,
     EventViewSet,
+    GroupViewSet,
+    GroupMemberViewSet,
     HouseholdViewSet,
     HouseholdMemberViewSet,
     AttendanceSessionViewSet,
@@ -22,6 +24,9 @@ from .views import (
 )
 
 router = SimpleRouter()
+router.register("events", EventViewSet, basename="events")
+router.register("groups", GroupViewSet, basename="groups")
+router.register("group-members", GroupMemberViewSet, basename="group-members")
 router.register("households", HouseholdViewSet, basename="households")
 router.register("household-members", HouseholdMemberViewSet, basename="household-members")
 router.register("attendance-sessions", AttendanceSessionViewSet, basename="attendance-sessions")
@@ -43,6 +48,7 @@ organization_router.register("", OrganizationViewSet, basename="organization")
 org_router = nested_routers.NestedSimpleRouter(organization_router, "", lookup="org")
 org_router.register("members", OrganizationMemberViewSet, basename="org-members")
 org_router.register("events", EventViewSet, basename="org-events")
+org_router.register("groups", GroupViewSet, basename="org-groups")
 
 urlpatterns = [
     path("", include(router.urls)),

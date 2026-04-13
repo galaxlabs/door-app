@@ -42,7 +42,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        await self._send_event("chat.connected", {"room_id": self.room_id})
+        room_context = await self._room_context()
+        await self._send_event("chat.connected", {"room_id": self.room_id, **room_context})
 
     async def disconnect(self, code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -152,6 +153,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def _is_member(self):
         from .models import ChatRoomMember
         return ChatRoomMember.objects.filter(room_id=self.room_id, user=self.user, is_deleted=False).exists()
+
+    @database_sync_to_async
+    def _room_context(self):
+        from .models import ChatRoom
+
+        room = ChatRoom.objects.filter(pk=self.room_id).first()
+        return {
+            "interaction_id": str(room.interaction_id) if room and room.interaction_id else None,
+            "room_type": room.type if room else None,
+        }
 
     @database_sync_to_async
     def _save_message(self, data):

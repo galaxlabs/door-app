@@ -4,6 +4,7 @@ from .models import ChatRoom, ChatRoomMember, ChatMessage, MessageStatus
 
 class ChatMessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source="sender.full_name", read_only=True)
+    room_interaction_id = serializers.UUIDField(source="room.interaction_id", read_only=True)
 
     class Meta:
         model = ChatMessage
@@ -11,7 +12,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
             "id", "room", "sender", "sender_name", "type",
             "content", "attachment", "reply_to", "sent_at",
             "edited_at", "is_deleted", "client_id", "sender_device_id",
-            "delivery_state", "created_at_server", "updated_at_server",
+            "delivery_state", "room_interaction_id", "created_at_server", "updated_at_server",
         ]
         read_only_fields = [
             "id", "sender", "sender_name", "sent_at", "edited_at",
@@ -20,12 +21,18 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
+    member_user_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+    )
+
     class Meta:
         model = ChatRoom
         fields = [
-            "id", "organization", "event", "group", "type", "name", "avatar",
+            "id", "organization", "event", "group", "interaction", "type", "name", "avatar",
             "status", "is_active", "created_by", "metadata",
-            "created_at_server", "updated_at_server",
+            "member_user_ids", "created_at_server", "updated_at_server",
         ]
         read_only_fields = ["id", "created_at_server", "updated_at_server"]
 
@@ -47,3 +54,8 @@ class MessageStatusSerializer(serializers.ModelSerializer):
         model = MessageStatus
         fields = ["id", "message", "user", "status", "status_device_id", "updated_at"]
         read_only_fields = ["id", "updated_at"]
+
+
+class ChatMessageStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=MessageStatus.STATUS_CHOICES)
+    status_device_id = serializers.CharField(max_length=128, required=False, allow_blank=True)

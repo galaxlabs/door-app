@@ -12,7 +12,7 @@ class BroadcastChannelSerializer(serializers.ModelSerializer):
     class Meta:
         model = BroadcastChannel
         fields = [
-            "id", "organization", "group", "name", "description",
+            "id", "organization", "group", "interaction", "name", "description",
             "type", "is_active", "created_at_server", "updated_at_server",
         ]
         read_only_fields = ["id", "created_at_server", "updated_at_server"]
@@ -22,7 +22,7 @@ class BroadcastMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = BroadcastMessage
         fields = [
-            "id", "channel", "sender", "title", "body", "type", "target_mode",
+            "id", "channel", "interaction", "sender", "title", "body", "type", "target_mode",
             "status", "payload", "scheduled_at", "sent_at",
             "created_at_server", "updated_at_server",
         ]
@@ -52,3 +52,7 @@ class BroadcastDeliverySerializer(serializers.ModelSerializer):
             "created_at_server", "updated_at_server",
         ]
         read_only_fields = ["id", "created_at_server", "updated_at_server"]
+
+
+class BroadcastDeliveryStatusUpdateSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=BroadcastDelivery.STATUS_CHOICES)

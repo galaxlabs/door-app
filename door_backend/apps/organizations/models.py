@@ -5,6 +5,15 @@ from django.db.models import Q, F
 from common.models import SoftDeleteModel
 
 
+class AccessRole(models.TextChoices):
+    OWNER = "owner", "Owner"
+    ORGANIZATION_ADMIN = "organization_admin", "Organization Admin"
+    MANAGER = "manager", "Manager"
+    GROUP_LEADER = "group_leader", "Group Leader"
+    STAFF = "staff", "Staff"
+    MEMBER = "member", "Member"
+
+
 class Organization(SoftDeleteModel):
     TYPE_CHOICES = [
         ("organization", "Organization"),
@@ -69,14 +78,6 @@ class Organization(SoftDeleteModel):
 
 
 class OrganizationMember(SoftDeleteModel):
-    ROLE_CHOICES = [
-        ("owner", "Owner"),
-        ("organization_admin", "Organization Admin"),
-        ("manager", "Manager"),
-        ("group_leader", "Group Leader"),
-        ("staff", "Staff"),
-        ("general_user", "General User"),
-    ]
     STATUS_CHOICES = [
         ("invited", "Invited"),
         ("active", "Active"),
@@ -92,7 +93,7 @@ class OrganizationMember(SoftDeleteModel):
         on_delete=models.CASCADE,
         related_name="memberships",
     )
-    role = models.CharField(max_length=24, choices=ROLE_CHOICES, default="general_user", db_index=True)
+    role = models.CharField(max_length=24, choices=AccessRole.choices, default=AccessRole.MEMBER, db_index=True)
     membership_status = models.CharField(
         max_length=16,
         choices=STATUS_CHOICES,
@@ -192,6 +193,12 @@ class Event(SoftDeleteModel):
 
 class Group(SoftDeleteModel):
     TYPE_CHOICES = [
+        ("family", "Family"),
+        ("hajj_group", "Hajj Group"),
+        ("expo_team", "Expo Team"),
+        ("clinic_team", "Clinic Team"),
+        ("office_team", "Office Team"),
+        ("team", "Team"),
         ("staff", "Staff"),
         ("attendee", "Attendee"),
         ("vip", "VIP"),
@@ -241,11 +248,6 @@ class Group(SoftDeleteModel):
 
 
 class GroupMember(SoftDeleteModel):
-    ROLE_CHOICES = [
-        ("group_leader", "Group Leader"),
-        ("staff", "Staff"),
-        ("general_user", "General User"),
-    ]
     STATUS_CHOICES = [
         ("active", "Active"),
         ("muted", "Muted"),
@@ -258,7 +260,7 @@ class GroupMember(SoftDeleteModel):
         on_delete=models.CASCADE,
         related_name="group_memberships",
     )
-    role = models.CharField(max_length=24, choices=ROLE_CHOICES, default="general_user", db_index=True)
+    role = models.CharField(max_length=24, choices=AccessRole.choices, default=AccessRole.MEMBER, db_index=True)
     membership_status = models.CharField(
         max_length=16,
         choices=STATUS_CHOICES,

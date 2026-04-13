@@ -18,24 +18,54 @@ def _generate_anonymous_id() -> str:
 # User Manager
 # ---------------------------------------------------------------------------
 class UserManager(BaseUserManager):
-    def create_user(self, phone, password=None, **extra):
-        if not phone:
+    def _normalize_email_value(self, email):
+        return self.normalize_email(email).strip().lower() if email else ""
+
+    def _normalize_phone_number(self, phone_number):
+        return phone_number.strip() if phone_number else ""
+
+    def create_user(self, email=None, phone_number=None, password=None, **extra):
+        phone_number = phone_number or extra.pop("phone", None)
+        full_name = (extra.get("full_name") or "").strip()
+        email = self._normalize_email_value(email or extra.get("email"))
+        phone_number = self._normalize_phone_number(phone_number)
+
+        if not phone_number:
             raise ValueError("Phone number is required")
-        user = self.model(phone=phone, **extra)
+
+        # Preserve compatibility for legacy internal callers while the public API
+        # enforces explicit email/full-name submission.
+        if not email:
+            email = f"{phone_number.replace('+', '').replace(' ', '')}@placeholder.door.local"
+        if not full_name:
+            full_name = phone_number
+
+        extra["email"] = email
+        extra["phone_number"] = phone_number
+        extra["full_name"] = full_name
+
+        user = self.model(**extra)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, phone, password, **extra):
+    def create_superuser(self, email=None, phone_number=None, password=None, **extra):
         extra.setdefault("is_staff", True)
         extra.setdefault("is_superuser", True)
-        return self.create_user(phone, password, **extra)
+        extra.setdefault("status", User.AccountStatus.ACTIVE)
+        return self.create_user(email=email, phone_number=phone_number, password=password, **extra)
 
 
 # ---------------------------------------------------------------------------
 # User
 # ---------------------------------------------------------------------------
 class User(AbstractBaseUser, PermissionsMixin):
+    class AccountStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        PENDING_VERIFICATION = "pending_verification", "Pending Verification"
+        SUSPENDED = "suspended", "Suspended"
+        DISABLED = "disabled", "Disabled"
+
     ROLE_CHOICES = [
         ("super_admin", "Super Admin"),
         ("owner", "Owner"),
@@ -51,9 +81,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     public_id = models.CharField(max_length=32, unique=True, default=_generate_public_id)
     anonymous_id = models.CharField(max_length=40, unique=True, default=_generate_anonymous_id)
 
-    phone = models.CharField(max_length=20, unique=True)
-    email = models.EmailField(blank=True, null=True, unique=True)
-    full_name = models.CharField(max_length=200, blank=True)
+    phone_number = models.CharField(max_length=20, unique=True, db_column="phone")
+    email = models.EmailField(unique=True)
+    full_name = models.CharField(max_length=200)
     avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
     timezone = models.CharField(max_length=64, default="UTC")
     role = models.CharField(max_length=24, choices=ROLE_CHOICES, default="general_user")
@@ -61,6 +91,12 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     is_phone_verified = models.BooleanField(default=False)
     is_email_verified = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=24,
+        choices=AccountStatus.choices,
+        default=AccountStatus.ACTIVE,
+        db_index=True,
+    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     last_seen_at = models.DateTimeField(null=True, blank=True)
@@ -88,28 +124,41 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_by_device_id = models.CharField(max_length=128, blank=True)
     last_modified_by_device_id = models.CharField(max_length=128, blank=True)
 
-    USERNAME_FIELD = "phone"
-    REQUIRED_FIELDS = []
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["phone_number", "full_name"]
 
     objects = UserManager()
 
     class Meta:
         db_table = "auth_users"
         indexes = [
-            models.Index(fields=["phone"]),
+            models.Index(fields=["phone_number"]),
+            models.Index(fields=["email"]),
             models.Index(fields=["public_id"]),
             models.Index(fields=["anonymous_id"]),
             models.Index(fields=["role", "is_active"]),
+            models.Index(fields=["status", "is_active"]),
             models.Index(fields=["updated_at_server"]),
         ]
 
     def __str__(self):
-        return f"{self.full_name or self.phone}"
+        return f"{self.full_name or self.email or self.phone_number}"
+
+    def save(self, *args, **kwargs):
+        self.email = User.objects._normalize_email_value(self.email)
+        self.phone_number = User.objects._normalize_phone_number(self.phone_number)
+        self.full_name = (self.full_name or "").strip()
+        super().save(*args, **kwargs)
 
     @property
     def is_verified(self):
         """Backward-compatible alias for older code paths."""
         return self.is_phone_verified
+
+    @property
+    def phone(self):
+        """Backward-compatible alias for older integrations."""
+        return self.phone_number
 
     def mark_seen(self):
         self.last_seen_at = timezone.now()

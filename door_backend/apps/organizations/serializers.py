@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import (
+    AccessRole,
     Organization,
     OrganizationMember,
     Event,
@@ -52,6 +53,11 @@ class OrganizationMemberSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "joined_at"]
 
+    def validate_role(self, value):
+        if value not in AccessRole.values:
+            raise serializers.ValidationError("Unsupported organization role.")
+        return value
+
 
 class EventSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,7 +68,7 @@ class EventSerializer(serializers.ModelSerializer):
             "starts_at", "ends_at", "status", "capacity", "metadata",
             "created_at_server", "updated_at_server",
         ]
-        read_only_fields = ["id", "created_at_server", "updated_at_server"]
+        read_only_fields = ["id", "created_by", "created_at_server", "updated_at_server"]
 
 
 class GroupSerializer(serializers.ModelSerializer):
@@ -85,6 +91,11 @@ class GroupMemberSerializer(serializers.ModelSerializer):
             "membership_status", "joined_at", "added_by",
         ]
         read_only_fields = ["id", "joined_at"]
+
+    def validate_role(self, value):
+        if value not in AccessRole.values:
+            raise serializers.ValidationError("Unsupported group role.")
+        return value
 
 
 class HouseholdSerializer(serializers.ModelSerializer):

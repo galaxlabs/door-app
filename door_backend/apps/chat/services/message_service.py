@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from apps.chat.models import ChatMessage
+from apps.chat.models import ChatMessage, MessageStatus
 
 
 class ChatMessageService:
@@ -22,3 +22,17 @@ class ChatMessageService:
             client_id=client_id,
             delivery_state="sent",
         )
+
+    @staticmethod
+    @transaction.atomic
+    def update_status(*, message: ChatMessage, user, status: str, status_device_id: str = ""):
+        status_obj, _ = MessageStatus.objects.update_or_create(
+            message=message,
+            user=user,
+            defaults={"status": status, "status_device_id": status_device_id},
+        )
+        state_rank = {"queued": 0, "sent": 1, "delivered": 2, "seen": 3}
+        if state_rank.get(status, 0) >= state_rank.get(message.delivery_state, 0):
+            message.delivery_state = status
+            message.save(update_fields=["delivery_state", "updated_at_server"])
+        return status_obj

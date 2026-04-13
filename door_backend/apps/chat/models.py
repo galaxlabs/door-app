@@ -7,6 +7,7 @@ class ChatRoom(SoftDeleteModel):
     TYPE_CHOICES = [
         ("direct", "Direct"),
         ("group", "Group"),
+        ("interaction", "Interaction"),
         ("event", "Event Channel"),
         ("organization", "Organization Channel"),
     ]
@@ -36,6 +37,13 @@ class ChatRoom(SoftDeleteModel):
         blank=True,
         related_name="chat_rooms",
     )
+    interaction = models.ForeignKey(
+        "qr_engine.InteractionRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_rooms",
+    )
 
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="group")
     name = models.CharField(max_length=255, blank=True)
@@ -57,6 +65,7 @@ class ChatRoom(SoftDeleteModel):
             models.Index(fields=["organization", "status"]),
             models.Index(fields=["event"]),
             models.Index(fields=["group"]),
+            models.Index(fields=["interaction"]),
             models.Index(fields=["type", "is_active"]),
             models.Index(fields=["updated_at_server"]),
         ]

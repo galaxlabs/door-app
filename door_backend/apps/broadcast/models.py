@@ -22,6 +22,13 @@ class BroadcastChannel(SoftDeleteModel):
         blank=True,
         related_name="broadcast_channels",
     )
+    interaction = models.ForeignKey(
+        "qr_engine.InteractionRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="broadcast_channels",
+    )
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="public")
@@ -32,6 +39,7 @@ class BroadcastChannel(SoftDeleteModel):
         indexes = [
             models.Index(fields=["organization", "is_active"]),
             models.Index(fields=["group"]),
+            models.Index(fields=["interaction"]),
             models.Index(fields=["updated_at_server"]),
         ]
         unique_together = [("organization", "name")]
@@ -75,6 +83,13 @@ class BroadcastMessage(SoftDeleteModel):
     ]
 
     channel = models.ForeignKey(BroadcastChannel, on_delete=models.CASCADE, related_name="messages")
+    interaction = models.ForeignKey(
+        "qr_engine.InteractionRecord",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="broadcast_messages",
+    )
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="broadcast_messages"
     )
@@ -92,6 +107,7 @@ class BroadcastMessage(SoftDeleteModel):
         ordering = ["-sent_at"]
         indexes = [
             models.Index(fields=["channel", "sent_at"]),
+            models.Index(fields=["interaction", "sent_at"]),
             models.Index(fields=["target_mode", "status"]),
             models.Index(fields=["scheduled_at"]),
             models.Index(fields=["updated_at_server"]),

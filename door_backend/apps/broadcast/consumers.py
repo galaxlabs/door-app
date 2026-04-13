@@ -41,7 +41,8 @@ class BroadcastConsumer(AsyncWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        await self._send_event("broadcast.connected", {"channel_id": self.channel_id})
+        context = await self._channel_context()
+        await self._send_event("broadcast.connected", {"channel_id": self.channel_id, **context})
 
     async def disconnect(self, code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -145,6 +146,16 @@ class BroadcastConsumer(AsyncWebsocketConsumer):
         if channel.type == "private":
             return BroadcastSubscription.objects.filter(channel=channel, user=self.user, is_deleted=False).exists()
         return True
+
+    @database_sync_to_async
+    def _channel_context(self):
+        from apps.broadcast.models import BroadcastChannel
+
+        channel = BroadcastChannel.objects.filter(pk=self.channel_id).first()
+        return {
+            "interaction_id": str(channel.interaction_id) if channel and channel.interaction_id else None,
+            "group_id": str(channel.group_id) if channel and channel.group_id else None,
+        }
 
     @database_sync_to_async
     def _mark_delivered(self, delivery_id: str):
