@@ -1,0 +1,69 @@
+name: door_mobile
+description: "Door App — Offline-first QR interaction, queue, communication platform"
+version: 1.0.0+1
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Networking
+  dio: ^5.4.3
+  retrofit: ^4.1.0
+
+  # State management
+  flutter_bloc: ^8.1.4
+  equatable: ^2.0.5
+
+  # Local storage / offline
+  sqflite: ^2.3.2
+  shared_preferences: ^2.2.3
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+
+  # QR
+  mobile_scanner: ^5.1.0
+  qr_flutter: ^4.1.0
+
+  # UI
+  go_router: ^13.2.1
+  flutter_svg: ^2.0.10+1
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  intl: ^0.20.2
+
+  # WebSocket
+  web_socket_channel: ^3.0.1
+
+  # Notifications
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  flutter_local_notifications: ^17.1.2
+
+  # Crypto / utils
+  uuid: ^4.4.0
+  crypto: ^3.0.3
+  connectivity_plus: ^6.0.3
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.9
+  retrofit_generator: ^8.1.0
+  hive_generator: ^2.0.1
+  json_serializable: ^6.8.0
+  json_annotation: ^4.9.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/images/
+    - assets/icons/
