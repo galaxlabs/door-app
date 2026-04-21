@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../../doors/models/door_models.dart';
-import '../../../doors/repositories/door_repository.dart';
+import '../../models/door_models.dart';
+import '../../repositories/door_repository.dart';
 
 class DoorDetailsScreen extends StatefulWidget {
   final String doorId;
@@ -17,412 +16,394 @@ class DoorDetailsScreen extends StatefulWidget {
 
 class _DoorDetailsScreenState extends State<DoorDetailsScreen> {
   final _repo = DoorRepository();
+  bool _archiving = false;
 
-  bool _loading = true;
-  bool _saving = false;
-  String? _error;
+  static const _typeIcons = {
+    'home': Icons.home_rounded,
+    'hospital': Icons.local_hospital_rounded,
+    'shop': Icons.storefront_rounded,
+    'office': Icons.business_rounded,
+    'education': Icons.school_rounded,
+    'trip': Icons.directions_bus_rounded,
+    'checkpoint': Icons.fact_check_rounded,
+    'emergency': Icons.emergency_rounded,
+  };
 
-  Door? _door;
-  final _nameCtrl = TextEditingController();
-  bool _isPublic = false;
+  Color _accent(String slug) => switch (slug) {
+    'hospital' => const Color(0xFFFF6D6D),
+    'shop' => const Color(0xFF37D6C5),
+    'office' => const Color(0xFF4ECB71),
+    'education' => const Color(0xFF6C9EFF),
+    'trip' => const Color(0xFFFFB347),
+    'checkpoint' => const Color(0xFFB47AFF),
+    'emergency' => const Color(0xFFFF4444),
+    _ => const Color(0xFFF6B94A),
+  };
 
-
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final door = await _repo.getDoor(widget.doorId);
-      if (!mounted) return;
-      setState(() {
-        _door = door;
-        _nameCtrl.text = door.name;
-        _isPublic = door.isPublic;
-        _loading = false;
-      });
-
-    } catch (_) {
-      if (!mounted) return;
-      setState(() { _error = 'Could not load this door.'; _loading = false; });
-    }
-  }
-
-
-
-  Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      setState(() => _error = 'Door name is required.');
-      return;
-    }
-    setState(() { _saving = true; _error = null; });
-    try {
-      await _repo.updateDoor(
-        doorId: widget.doorId,
-        name: name,
-        isPublic: _isPublic,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved.'), behavior: SnackBarBehavior.floating),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _error = 'Could not save door.');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _copyToken() async {
-    final token = _door?.qrToken ?? '';
-    if (token.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: token));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Token copied.'), behavior: SnackBarBehavior.floating),
+  Future<void> _archiveDoor(Door door) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Archive door?'),
+        content: const Text('The door will be deactivated. You can restore it later.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Archive', style: TextStyle(color: Color(0xFFFF6D6D))),
+          ),
+        ],
+      ),
     );
+    if (confirm != true) return;
+    setState(() => _archiving = true);
+    await _repo.deleteDoor(door.id);
+    if (!mounted) return;
+    context.pop();
   }
-
-  Color _accentFor(String slug) {
-    switch (slug) {
-      case 'hospital': return const Color(0xFFFF6D6D);
-      case 'shop':     return const Color(0xFF37D6C5);
-      case 'office':   return const Color(0xFF4D9EFF);
-      case 'education':return const Color(0xFFA78BFA);
-      case 'trip':     return const Color(0xFF4ECB71);
-      case 'checkpoint':return const Color(0xFFFF9A3C);
-      case 'emergency':return const Color(0xFFFF4444);
-      default:         return const Color(0xFFF6B94A);
-    }
-  }
-
-  Color get _accent => _door != null ? _accentFor(_door!.typeSlug) : const Color(0xFFF6B94A);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF111111),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
-        title: Text(_door?.name ?? 'Door', style: const TextStyle(fontWeight: FontWeight.w900)),
-        actions: [
-          if (_door != null)
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded),
-              color: const Color(0xFFFF6D6D),
-              onPressed: () async {
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text('Archive door?'),
-                    content: const Text('This door will be archived and removed from your list.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Archive', style: TextStyle(color: Color(0xFFFF6D6D))),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed == true) {
-                  await _repo.deleteDoor(widget.doorId);
-                  if (mounted) context.pop();
-                }
-              },
-            ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null && _door == null
-              ? Center(child: Text(_error!, style: const TextStyle(color: Color(0xFFFF6D6D))))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+    final theme = Theme.of(context);
+
+    return StreamBuilder<List<Door>>(
+      // Listen to all user doors and find this one
+      stream: FirebaseFirestore.instance
+          .collection('doors')
+          .doc(widget.doorId)
+          .snapshots()
+          .map((s) => s.exists ? [Door.fromMap(s.id, s.data()!)] : <Door>[]),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snap.data!.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: const Center(child: Text('Door not found')),
+          );
+        }
+
+        final door = snap.data!.first;
+        final accent = _accent(door.typeSlug);
+        final icon = _typeIcons[door.typeSlug] ?? Icons.door_front_door_rounded;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(door.name),
+            actions: [
+              if (!_archiving)
+                IconButton(
+                  icon: const Icon(Icons.archive_outlined),
+                  tooltip: 'Archive door',
+                  onPressed: () => _archiveDoor(door),
+                ),
+            ],
+          ),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Header card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: accent.withOpacity(0.25)),
+                ),
+                child: Row(
                   children: [
-                    // Status chip
-                    if (_door != null)
-                      Row(children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            color: _door!.status == DoorStatus.active
-                                ? _accent.withValues(alpha: 0.15)
-                                : const Color(0x22FFFFFF),
-                          ),
-                          child: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Container(
-                              width: 7, height: 7,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: _door!.status == DoorStatus.active
-                                    ? _accent : const Color(0xFF666666),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _door!.status.name[0].toUpperCase() + _door!.status.name.substring(1),
-                              style: TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w700,
-                                color: _door!.status == DoorStatus.active
-                                    ? _accent : const Color(0xFF666666),
-                              ),
-                            ),
-                          ]),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            color: _accent.withValues(alpha: 0.10),
-                          ),
-                          child: Text(
-                            _door!.typeSlug.replaceAll('_', ' '),
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _accent),
-                          ),
-                        ),
-                      ]),
-
-                    // Edit section
-                    const SizedBox(height: 20),
-                    const Text('DOOR SETTINGS',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                            color: Color(0xFF666666), letterSpacing: 1.2)),
-                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      width: 64, height: 64,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: const Color(0xFF1D1D1D),
+                        color: accent.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(18),
                       ),
-                      child: Column(children: [
-                        TextField(
-                          controller: _nameCtrl,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                          decoration: const InputDecoration(labelText: 'Door name'),
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Public door',
-                              style: TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: const Text('Visitors can scan without being a member'),
-                          value: _isPublic,
-                          onChanged: (v) => setState(() => _isPublic = v),
-                          activeThumbColor: _accent,
-          activeTrackColor: _accent.withValues(alpha: 0.4),
-                        ),
-                        if (_error != null) ...[  
-                          const SizedBox(height: 8),
-                          Text(_error!, style: const TextStyle(color: Color(0xFFFF4444), fontSize: 13)),
+                      child: Icon(icon, color: accent, size: 32),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(door.name,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              )),
+                          const SizedBox(height: 4),
+                          Text(
+                            door.typeSlug.replaceAll('_', ' ').replaceFirstMapped(
+                                RegExp(r'^.'), (m) => m.group(0)!.toUpperCase()),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: _saving ? null : _save,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _accent,
-                              foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
-                            ),
-                            child: _saving
-                                ? const SizedBox(width: 20, height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                                : const Text('Save', style: TextStyle(fontWeight: FontWeight.w900)),
-                          ),
-                        ),
-                      ]),
+                      ),
                     ),
-
-                    // QR section
-                    if (_door != null && _door!.qrToken.isNotEmpty) ...[  
-                      const SizedBox(height: 24),
-                      const Text('QR CODE',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                              color: Color(0xFF666666), letterSpacing: 1.2)),
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          color: const Color(0xFF1D1D1D),
-                        ),
-                        child: Column(children: [
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              color: Colors.white,
-                            ),
-                            child: QrImageView(data: _door!.qrToken, size: 180),
-                          ),
-                          const SizedBox(height: 14),
-                          GestureDetector(
-                            onTap: _copyToken,
-                            child: Row(children: [
-                              Expanded(
-                                child: Text(_door!.qrToken,
-                                    style: const TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: 13,
-                                        color: Color(0xFF888888))),
-                              ),
-                              const Icon(Icons.copy_rounded, size: 16, color: Color(0xFF888888)),
-                            ]),
-                          ),
-                        ]),
-                      ),
-                    ],
-
-                    // Interactions
-                    const SizedBox(height: 24),
-                    Row(children: [
-                      const Expanded(
-                        child: Text('RECENT VISITORS',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                                color: Color(0xFF666666), letterSpacing: 1.2)),
-                      ),
-                      StreamBuilder<List<DoorInteraction>>(
-                        stream: _repo.watchDoorInteractions(widget.doorId),
-                        builder: (context, snap) {
-                          final count = snap.data?.length ?? 0;
-                          if (count == 0) return const SizedBox.shrink();
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              color: _accent.withValues(alpha: 0.15),
-                            ),
-                            child: Text('$count',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _accent)),
-                          );
-                        },
-                      ),
-                    ]),
-                    const SizedBox(height: 10),
-                    StreamBuilder<List<DoorInteraction>>(
-                      stream: _repo.watchDoorInteractions(widget.doorId),
-                      builder: (context, snap) {
-                        if (snap.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
-                        final items = snap.data ?? [];
-                        if (items.isEmpty) {
-                          return Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: const Color(0xFF1D1D1D),
-                            ),
-                            child: const Center(
-                              child: Text('No visitors yet.',
-                                  style: TextStyle(color: Color(0xFF666666))),
-                            ),
-                          );
-                        }
-                        return Column(
-                          children: items.map((interaction) {
-                            final name = interaction.visitorName ?? 'Anonymous';
-                            final time = interaction.createdAt != null
-                                ? _formatTime(interaction.createdAt!)
-                                : '';
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                color: const Color(0xFF1D1D1D),
-                              ),
-                              child: Row(children: [
-                                Container(
-                                  width: 36, height: 36,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _accent.withValues(alpha: 0.15),
-                                  ),
-                                  child: Icon(Icons.person_rounded, color: _accent, size: 18),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(name, style: const TextStyle(
-                                        fontWeight: FontWeight.w700, fontSize: 14)),
-                                    if (interaction.visitorMessage != null)
-                                      Text(interaction.visitorMessage!,
-                                          style: const TextStyle(
-                                              color: Color(0xFF888888), fontSize: 12)),
-                                  ],
-                                )),
-                                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                                  _StatusChip(status: interaction.status, accent: _accent),
-                                  if (time.isNotEmpty)
-                                    Text(time,
-                                        style: const TextStyle(
-                                            color: Color(0xFF666666), fontSize: 11)),
-                                ]),
-                              ]),
-                            );
-                          }).toList(),
-                        );
-                      },
-                    ),
+                    _StatusChip(status: door.status),
                   ],
                 ),
-    );
-  }
+              ),
+              const SizedBox(height: 16),
 
-  String _formatTime(Timestamp ts) {
-    final dt = ts.toDate();
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
+              // QR Token row
+              _InfoTile(
+                icon: Icons.qr_code_rounded,
+                label: 'QR Token',
+                value: door.qrToken,
+                accent: accent,
+                trailing: IconButton(
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  tooltip: 'Copy',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: door.qrToken));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('QR token copied'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Public / private
+              _InfoTile(
+                icon: door.isPublic ? Icons.public_rounded : Icons.lock_outline_rounded,
+                label: 'Visibility',
+                value: door.isPublic ? 'Public' : 'Private',
+                accent: door.isPublic ? const Color(0xFF37D6C5) : const Color(0xFFB8B0A0),
+              ),
+              const SizedBox(height: 16),
+
+              // Live interactions
+              Text('Recent interactions',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              _InteractionsList(doorId: door.id),
+
+              const SizedBox(height: 24),
+
+              // Toggle active/inactive
+              if (door.status != DoorStatus.archived)
+                OutlinedButton.icon(
+                  onPressed: () => _repo.updateDoor(
+                    doorId: door.id,
+                    status: door.status == DoorStatus.active
+                        ? DoorStatus.inactive
+                        : DoorStatus.active,
+                  ),
+                  icon: Icon(
+                    door.status == DoorStatus.active
+                        ? Icons.pause_circle_outline_rounded
+                        : Icons.play_circle_outline_rounded,
+                  ),
+                  label: Text(door.status == DoorStatus.active ? 'Deactivate' : 'Activate'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  final InteractionStatus status;
+// ── Info tile ─────────────────────────────────────────────────────────────────
+
+class _InfoTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
   final Color accent;
-  const _StatusChip({required this.status, required this.accent});
+  final Widget? trailing;
+
+  const _InfoTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.accent,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    switch (status) {
-      case InteractionStatus.admitted: color = const Color(0xFF4ECB71); break;
-      case InteractionStatus.declined: color = const Color(0xFFFF6D6D); break;
-      case InteractionStatus.completed: color = const Color(0xFF888888); break;
-      case InteractionStatus.seen: color = accent; break;
-      default: color = const Color(0xFFF6B94A);
-    }
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        color: color.withValues(alpha: 0.15),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
       ),
-      child: Text(
-        status.name[0].toUpperCase() + status.name.substring(1),
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+      child: Row(
+        children: [
+          Icon(icon, color: accent, size: 20),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  )),
+              Text(value,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const Spacer(),
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
+// ── Status chip ───────────────────────────────────────────────────────────────
+
+class _StatusChip extends StatelessWidget {
+  final DoorStatus status;
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (status) {
+      DoorStatus.active => ('Active', const Color(0xFF4ECB71)),
+      DoorStatus.inactive => ('Inactive', const Color(0xFFB8B0A0)),
+      DoorStatus.archived => ('Archived', const Color(0xFFFF6D6D)),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(label,
+          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+// ── Live interactions list ────────────────────────────────────────────────────
+
+class _InteractionsList extends StatelessWidget {
+  final String doorId;
+  const _InteractionsList({required this.doorId});
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = DoorRepository();
+    final theme = Theme.of(context);
+
+    return StreamBuilder<List<DoorInteraction>>(
+      stream: repo.watchDoorInteractions(doorId),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final interactions = snap.data!;
+        if (interactions.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
+            ),
+            child: Center(
+              child: Text('No visitor interactions yet',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  )),
+            ),
+          );
+        }
+
+        return Column(
+          children: interactions.map((i) => _InteractionTile(interaction: i)).toList(),
+        );
+      },
+    );
+  }
+}
+
+class _InteractionTile extends StatelessWidget {
+  final DoorInteraction interaction;
+  const _InteractionTile({required this.interaction});
+
+  Color get _statusColor => switch (interaction.status) {
+    InteractionStatus.pending => const Color(0xFFF6B94A),
+    InteractionStatus.seen => const Color(0xFF6C9EFF),
+    InteractionStatus.admitted => const Color(0xFF4ECB71),
+    InteractionStatus.declined => const Color(0xFFFF6D6D),
+    InteractionStatus.completed => const Color(0xFFB8B0A0),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outline.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: _statusColor.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.person_outline_rounded, color: _statusColor, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  interaction.visitorName ?? 'Anonymous visitor',
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                if (interaction.visitorMessage != null)
+                  Text(interaction.visitorMessage!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: _statusColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              interaction.status.name.replaceFirstMapped(
+                  RegExp(r'^.'), (m) => m.group(0)!.toUpperCase()),
+              style: TextStyle(
+                  color: _statusColor, fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

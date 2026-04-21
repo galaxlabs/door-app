@@ -234,14 +234,14 @@ class _DoorsTab extends StatelessWidget {
           subtitle: enableLive ? 'Create a new door and generate a QR' : 'Sign in to create your first door',
           icon: Icons.add_circle_outline,
           accent: const Color(0xFFF6B94A),
-          onTap: enableLive ? () => context.push('/doors/create') : () => context.go('/login'),
+          onTap: enableLive ? () => context.push('/doors/pick-type') : () => context.go('/login'),
         ),
         _NavCard(
           title: 'Emergency',
           subtitle: 'Create an emergency card door preset',
           icon: Icons.warning_amber_rounded,
           accent: const Color(0xFFFF6D6D),
-          onTap: enableLive ? () => context.push('/doors/create') : () => context.go('/login'),
+          onTap: enableLive ? () => context.push('/doors/pick-type') : () => context.go('/login'),
         ),
         _NavCard(
           title: 'Join Door',
@@ -339,7 +339,7 @@ class _FirebaseDoorsStream extends StatelessWidget {
                     style: TextStyle(color: Color(0xFF888888))),
                 const SizedBox(height: 14),
                 OutlinedButton.icon(
-                  onPressed: () => context.push('/doors/create'),
+                  onPressed: () => context.push('/doors/pick-type'),
                   icon: const Icon(Icons.add_circle_outline),
                   label: const Text('Create door'),
                 ),

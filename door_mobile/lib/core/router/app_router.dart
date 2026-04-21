@@ -20,6 +20,9 @@ import '../../features/profile/presentation/screens/quick_guide_screen.dart';
 import '../../features/profile/presentation/screens/theme_screen.dart';
 import '../../features/doors/presentation/screens/create_door_screen.dart';
 import '../../features/doors/presentation/screens/door_details_screen.dart';
+import '../../features/doors/presentation/screens/door_type_picker_screen.dart';
+import '../../features/doors/presentation/screens/doors_list_screen.dart';
+import '../../features/doors/models/door_models.dart';
 
 class AppRouter {
   static final router = GoRouter(
@@ -38,11 +41,16 @@ class AppRouter {
       GoRoute(path: '/language', builder: (_, __) => const LanguageScreen()),
       GoRoute(path: '/theme', builder: (_, __) => const ThemeScreen()),
       GoRoute(path: '/quick-guide', builder: (_, __) => const QuickGuideScreen()),
-      GoRoute(path: '/doors/create', builder: (_, __) => const CreateDoorScreen()),
+      GoRoute(path: '/doors/pick-type', builder: (_, __) => const DoorTypePickerScreen()),
+      GoRoute(
+        path: '/doors/create',
+        builder: (ctx, state) => CreateDoorScreen(doorType: state.extra as DoorType?),
+      ),
       GoRoute(
         path: '/doors/:id',
         builder: (ctx, state) => DoorDetailsScreen(doorId: state.pathParameters['id']!),
       ),
+      GoRoute(path: '/doors-list', builder: (_, __) => const DoorsListScreen()),
       GoRoute(
         path: '/queue/:id',
         builder: (ctx, state) => QueueScreen(queueId: state.pathParameters['id']!),

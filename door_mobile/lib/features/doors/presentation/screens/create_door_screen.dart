@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../doors/models/door_models.dart';
-import '../../../doors/repositories/door_repository.dart';
+import '../../models/door_models.dart';
+import '../../repositories/door_repository.dart';
 
+/// Step 2 of create door: name it and fill any dynamic fields for the chosen type.
 class CreateDoorScreen extends StatefulWidget {
-  const CreateDoorScreen({super.key});
+  final DoorType? doorType;
+  const CreateDoorScreen({super.key, this.doorType});
 
   @override
   State<CreateDoorScreen> createState() => _CreateDoorScreenState();
@@ -14,336 +15,237 @@ class CreateDoorScreen extends StatefulWidget {
 
 class _CreateDoorScreenState extends State<CreateDoorScreen> {
   final _repo = DoorRepository();
+  final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
+  final Map<String, TextEditingController> _fieldCtrls = {};
+  final Map<String, dynamic> _fieldValues = {};
 
-  bool _loadingTypes = true;
-  bool _creating = false;
+  bool _isPublic = false;
+  bool _saving = false;
   String? _error;
 
-  List<DoorType> _doorTypes = [];
-  DoorType? _selectedType;
-  final Map<String, dynamic> _fieldValues = {};
+  DoorType? get _type => widget.doorType;
 
   @override
   void initState() {
     super.initState();
-    _loadTypes();
+    // Pre-build controllers for each dynamic field
+    for (final field in _type?.fields ?? []) {
+      _fieldCtrls[field.fieldKey] = TextEditingController(
+        text: field.defaultValue?.toString() ?? '',
+      );
+    }
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    for (final c in _fieldCtrls.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _loadTypes() async {
-    try {
-      final types = await _repo.getDoorTypes();
-      if (!mounted) return;
-      setState(() {
-        _doorTypes = types;
-        if (types.isNotEmpty) _selectedType = types.first;
-        _loadingTypes = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Could not load door types.';
-        _loadingTypes = false;
-      });
-    }
-  }
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-  Future<void> _create() async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      setState(() => _error = 'Sign in first.');
-      return;
+    // Collect dynamic field values
+    for (final field in _type?.fields ?? []) {
+      final raw = _fieldCtrls[field.fieldKey]?.text.trim() ?? '';
+      _fieldValues[field.fieldKey] = switch (field.fieldType) {
+        'number' => num.tryParse(raw) ?? raw,
+        'boolean' => raw.toLowerCase() == 'true',
+        _ => raw,
+      };
     }
-    if (_selectedType == null) {
-      setState(() => _error = 'Select a door type.');
-      return;
-    }
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      setState(() => _error = 'Door name is required.');
-      return;
-    }
-    for (final f in _selectedType!.fields) {
-      if (f.isRequired &&
-          (_fieldValues[f.fieldKey] == null ||
-              _fieldValues[f.fieldKey].toString().isEmpty)) {
-        setState(() => _error = '${f.label} is required.');
-        return;
-      }
-    }
-    setState(() {
-      _creating = true;
-      _error = null;
-    });
+
+    setState(() { _saving = true; _error = null; });
+
     try {
       final result = await _repo.createDoor(
-        name: name,
-        typeId: _selectedType!.id,
-        fieldValues: Map<String, dynamic>.from(_fieldValues),
+        name: _nameCtrl.text.trim(),
+        typeId: _type!.id,
+        isPublic: _isPublic,
+        fieldValues: _fieldValues,
       );
       if (!mounted) return;
-      context.pushReplacement('/doors/${result.id}');
-    } catch (_) {
+      context.go('/doors/${result.id}');
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Could not create door. Please try again.');
-    } finally {
-      if (mounted) setState(() => _creating = false);
-    }
-  }
-
-  Color _accentFor(String slug) {
-    switch (slug) {
-      case 'hospital': return const Color(0xFFFF6D6D);
-      case 'shop':     return const Color(0xFF37D6C5);
-      case 'office':   return const Color(0xFF4D9EFF);
-      case 'education':return const Color(0xFFA78BFA);
-      case 'trip':     return const Color(0xFF4ECB71);
-      case 'checkpoint':return const Color(0xFFFF9A3C);
-      case 'emergency':return const Color(0xFFFF4444);
-      default:         return const Color(0xFFF6B94A);
-    }
-  }
-
-  IconData _iconFor(String name) {
-    switch (name) {
-      case 'local_hospital': return Icons.local_hospital_rounded;
-      case 'storefront':     return Icons.storefront_rounded;
-      case 'business':       return Icons.business_rounded;
-      case 'school':         return Icons.school_rounded;
-      case 'directions_bus': return Icons.directions_bus_rounded;
-      case 'fact_check':     return Icons.fact_check_rounded;
-      case 'emergency':      return Icons.emergency_rounded;
-      default:               return Icons.home_rounded;
-    }
-  }
-
-  Widget _buildField(DoorTypeField field) {
-    switch (field.fieldType) {
-      case 'boolean':
-        return SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          title: Text(field.label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          value: (_fieldValues[field.fieldKey] as bool?) ?? false,
-          onChanged: (v) => setState(() => _fieldValues[field.fieldKey] = v),
-        );
-      case 'select':
-        return InputDecorator(
-          decoration: InputDecoration(labelText: field.label + (field.isRequired ? ' *' : '')),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _fieldValues[field.fieldKey]?.toString(),
-              hint: const Text('Select…'),
-              items: field.options
-                  .map((o) => DropdownMenuItem(
-                        value: o['value'],
-                        child: Text(o['label'] ?? o['value'] ?? ''),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _fieldValues[field.fieldKey] = v),
-            ),
-          ),
-        );
-      case 'number':
-        return TextField(
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: field.label + (field.isRequired ? ' *' : '')),
-          onChanged: (v) => _fieldValues[field.fieldKey] = int.tryParse(v) ?? v,
-        );
-      case 'textarea':
-        return TextField(
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: field.label + (field.isRequired ? ' *' : ''),
-            alignLabelWithHint: true,
-          ),
-          onChanged: (v) => _fieldValues[field.fieldKey] = v,
-        );
-      default:
-        return TextField(
-          decoration: InputDecoration(labelText: field.label + (field.isRequired ? ' *' : '')),
-          onChanged: (v) => _fieldValues[field.fieldKey] = v,
-        );
+      setState(() { _saving = false; _error = e.toString(); });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
-        title: const Text('New Door', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: Text(_type != null ? 'New ${_type!.name} Door' : 'Create Door'),
       ),
-      body: _loadingTypes
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              children: [
-                // Type picker
-                const Text('DOOR TYPE',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Color(0xFF666666), letterSpacing: 1.2)),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 100,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _doorTypes.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
-                    itemBuilder: (_, i) {
-                      final t = _doorTypes[i];
-                      final accent = _accentFor(t.slug);
-                      final selected = _selectedType?.id == t.id;
-                      return GestureDetector(
-                        onTap: () => setState(() {
-                          _selectedType = t;
-                          _fieldValues.clear();
-                        }),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          width: 88,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            color: selected ? accent.withValues(alpha: 0.15) : const Color(0xFF1D1D1D),
-                            border: Border.all(
-                              color: selected ? accent.withValues(alpha: 0.7) : const Color(0x22FFFFFF),
-                              width: selected ? 1.5 : 1,
-                            ),
-                          ),
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(_iconFor(t.icon),
-                                  color: selected ? accent : const Color(0xFF666666), size: 28),
-                              const SizedBox(height: 6),
-                              Text(t.name,
-                                  style: TextStyle(
-                                    fontSize: 11, fontWeight: FontWeight.w700,
-                                    color: selected ? accent : const Color(0xFF666666),
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Type badge
+            if (_type != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF6B94A).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF6B94A).withOpacity(0.4)),
                 ),
-
-                // Feature chips
-                if (_selectedType != null && _selectedType!.features.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 6, runSpacing: 6,
-                    children: _selectedType!.features.map((f) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        color: _accentFor(_selectedType!.slug).withValues(alpha: 0.12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.door_front_door_rounded, color: Color(0xFFF6B94A), size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      _type!.name,
+                      style: const TextStyle(
+                        color: Color(0xFFF6B94A),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                       ),
-                      child: Text(f.replaceAll('_', ' '),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: _accentFor(_selectedType!.slug),
-                            fontWeight: FontWeight.w600,
-                          )),
-                    )).toList(),
-                  ),
-                ],
-
-                // Door name
-                const SizedBox(height: 24),
-                const Text('DOOR DETAILS',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                        color: Color(0xFF666666), letterSpacing: 1.2)),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _nameCtrl,
-                  textInputAction: TextInputAction.next,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  decoration: InputDecoration(
-                    labelText: 'Door name *',
-                    hintText: _selectedType != null ? 'e.g. My ${_selectedType!.name} Door' : 'Name',
-                    filled: true,
-                    fillColor: const Color(0xFF1D1D1D),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '· ${_type!.features.length} features',
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(height: 20),
+            ],
 
-                // Dynamic fields
-                if (_selectedType != null && _selectedType!.fields.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  const Text('SETUP OPTIONS',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                          color: Color(0xFF666666), letterSpacing: 1.2)),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: const Color(0xFF1D1D1D),
-                    ),
-                    child: Column(
-                      children: _selectedType!.fields
-                          .map((f) => Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: _buildField(f),
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                ],
-
-                // Error
-                if (_error != null) ...[  
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      color: const Color(0xFFFF4444).withValues(alpha: 0.12),
-                    ),
-                    child: Row(children: [
-                      const Icon(Icons.error_outline, color: Color(0xFFFF4444), size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(_error!,
-                          style: const TextStyle(color: Color(0xFFFF4444), fontSize: 13))),
-                    ]),
-                  ),
-                ],
-
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: _creating ? null : _create,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _selectedType != null
-                          ? _accentFor(_selectedType!.slug)
-                          : const Color(0xFFF6B94A),
-                      foregroundColor: Colors.black,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: _creating
-                        ? const SizedBox(width: 22, height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Text('Create Door',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-                  ),
-                ),
-              ],
+            // Door name
+            TextFormField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Door name',
+                hintText: 'e.g. My Clinic, Main Entrance…',
+                prefixIcon: Icon(Icons.label_outline_rounded),
+              ),
+              textCapitalization: TextCapitalization.words,
+              validator: (v) => (v?.trim().isEmpty ?? true) ? 'Enter a door name' : null,
             ),
+            const SizedBox(height: 16),
+
+            // Public toggle
+            SwitchListTile(
+              value: _isPublic,
+              onChanged: (v) => setState(() => _isPublic = v),
+              title: const Text('Public door'),
+              subtitle: const Text('Anyone with the QR link can see this door'),
+              contentPadding: EdgeInsets.zero,
+              activeColor: const Color(0xFFF6B94A),
+            ),
+
+            // Dynamic fields from door type
+            if ((_type?.fields ?? []).isNotEmpty) ...[
+              const Divider(height: 32),
+              Text('Type fields', style: theme.textTheme.titleSmall?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                letterSpacing: 0.5,
+              )),
+              const SizedBox(height: 12),
+              ..._type!.fields.map((field) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _buildFieldWidget(field, theme),
+              )),
+            ],
+
+            // Error
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.4)),
+                ),
+                child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+              ),
+            ],
+
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _saving ? null : _submit,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: const Color(0xFFF6B94A),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      height: 20, width: 20,
+                      child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                  : const Text('Create Door', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildFieldWidget(DoorTypeField field, ThemeData theme) {
+    switch (field.fieldType) {
+      case 'boolean':
+        return SwitchListTile(
+          value: (_fieldValues[field.fieldKey] as bool?) ?? false,
+          onChanged: (v) => setState(() => _fieldValues[field.fieldKey] = v),
+          title: Text(field.label),
+          contentPadding: EdgeInsets.zero,
+          activeColor: const Color(0xFFF6B94A),
+        );
+
+      case 'select':
+        final opts = field.options;
+        return DropdownButtonFormField<String>(
+          value: _fieldCtrls[field.fieldKey]?.text.isNotEmpty == true
+              ? _fieldCtrls[field.fieldKey]!.text
+              : null,
+          decoration: InputDecoration(labelText: field.label),
+          items: opts
+              .map((o) => DropdownMenuItem(value: o['value'], child: Text(o['label'] ?? o['value'] ?? '')))
+              .toList(),
+          onChanged: (v) => setState(() => _fieldCtrls[field.fieldKey]?.text = v ?? ''),
+          validator: field.isRequired
+              ? (v) => (v == null || v.isEmpty) ? '${field.label} is required' : null
+              : null,
+        );
+
+      case 'textarea':
+        return TextFormField(
+          controller: _fieldCtrls[field.fieldKey],
+          decoration: InputDecoration(labelText: field.label),
+          maxLines: 3,
+          validator: field.isRequired
+              ? (v) => (v?.trim().isEmpty ?? true) ? '${field.label} is required' : null
+              : null,
+        );
+
+      default:
+        return TextFormField(
+          controller: _fieldCtrls[field.fieldKey],
+          decoration: InputDecoration(labelText: field.label),
+          keyboardType: field.fieldType == 'number'
+              ? TextInputType.number
+              : field.fieldType == 'date'
+                  ? TextInputType.datetime
+                  : TextInputType.text,
+          validator: field.isRequired
+              ? (v) => (v?.trim().isEmpty ?? true) ? '${field.label} is required' : null
+              : null,
+        );
+    }
   }
 }

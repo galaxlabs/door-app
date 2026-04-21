@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,12 @@ class AuthRepository {
   // ── Google Sign-In ──────────────────────────────────────────────────────────
 
   Future<UserCredential> signInWithGoogle() async {
+    if (kIsWeb) {
+      // Web: use Firebase popup flow
+      final provider = GoogleAuthProvider();
+      return _auth.signInWithPopup(provider);
+    }
+    // Mobile: native Google sign-in
     final account = await _googleSignIn.signIn();
     if (account == null) throw Exception('Google sign-in cancelled.');
     final googleAuth = await account.authentication;
