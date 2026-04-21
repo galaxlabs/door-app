@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../auth/data/auth_repository.dart';
 import '../../../doors/models/door_models.dart';
@@ -216,32 +217,16 @@ class _DoorsTab extends StatelessWidget {
 
   const _DoorsTab({required this.showNote, required this.enableLive});
 
-  Color _accentFor(String slug) {
-    switch (slug) {
-      case 'hospital':   return const Color(0xFFFF6D6D);
-      case 'shop':       return const Color(0xFF37D6C5);
-      case 'office':     return const Color(0xFF4D9EFF);
-      case 'education':  return const Color(0xFFA78BFA);
-      case 'trip':       return const Color(0xFF4ECB71);
-      case 'checkpoint': return const Color(0xFFFF9A3C);
-      case 'emergency':  return const Color(0xFFFF4444);
-      default:           return const Color(0xFFF6B94A);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    final repo = DoorRepository();
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _InfoPanel(
-          title: 'Your Doors',
+          title: 'Door controls',
           body: enableLive
-              ? 'Live doors are loaded from Firebase below.'
-              : 'Guest mode. Sign in to see your real doors.',
+              ? 'Your live door records are loaded from the backend below.'
+              : 'Guest mode is active. Sign in later to load your real doors from the backend.',
         ),
         const SizedBox(height: 12),
         _NavCard(
@@ -260,70 +245,15 @@ class _DoorsTab extends StatelessWidget {
         ),
         _NavCard(
           title: 'Join Door',
-          subtitle: 'Scan a QR to open the visitor flow',
+          subtitle: enableLive ? 'Scan a QR to open the visitor flow' : 'Open the scanner in guest mode',
           icon: Icons.qr_code_scanner_rounded,
           accent: const Color(0xFF37D6C5),
           onTap: () => context.push('/scan'),
         ),
         const SizedBox(height: 12),
-        if (enableLive && uid != null)
-          StreamBuilder<List<Door>>(
-            stream: repo.watchMyDoors(uid),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-              }
-              final doors = snapshot.data ?? [];
-              if (doors.isEmpty) {
-                return Container(
-                  margin: const EdgeInsets.only(top: 4),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    color: const Color(0xFF1A1A1A),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(Icons.door_front_door_rounded,
-                          size: 40, color: Color(0xFF444444)),
-                      const SizedBox(height: 12),
-                      const Text('No doors yet',
-                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                      const SizedBox(height: 6),
-                      const Text('Create your first door and it will appear here.',
-                          style: TextStyle(color: Color(0xFF888888)),
-                          textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: () => context.push('/doors/create'),
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Create door'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return Column(
-                children: doors.take(10).map((door) {
-                  final accent = _accentFor(door.typeSlug);
-                  final statusLabel = door.status == DoorStatus.active ? 'Active' : 'Inactive';
-                  return _DoorCard(
-                    title: door.name,
-                    subtitle: door.typeSlug.replaceAll('_', ' '),
-                    status: statusLabel,
-                    accent: accent,
-                    onTap: () => context.push('/doors/${door.id}'),
-                  );
-                }).toList(),
-              );
-            },
-          ),
-        if (!enableLive || uid == null) ...[
+        if (enableLive)
+          _FirebaseDoorsStream(),
+        if (!enableLive) ...[
           _DoorCard(
             title: 'Home Entrance',
             subtitle: 'Bell mode • family notifications on',
@@ -354,6 +284,83 @@ class _DoorsTab extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+// ── Firebase real-time doors stream ─────────────────────────────────────────
+
+class _FirebaseDoorsStream extends StatelessWidget {
+  const _FirebaseDoorsStream();
+
+  Color _accentFor(String slug) {
+    switch (slug) {
+      case 'hospital':   return const Color(0xFFFF6D6D);
+      case 'shop':       return const Color(0xFF37D6C5);
+      case 'office':     return const Color(0xFF4D9EFF);
+      case 'education':  return const Color(0xFFA78BFA);
+      case 'trip':       return const Color(0xFF4ECB71);
+      case 'checkpoint': return const Color(0xFFFF9A3C);
+      case 'emergency':  return const Color(0xFFFF4444);
+      default:           return const Color(0xFFF6B94A);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return const SizedBox.shrink();
+    }
+    return StreamBuilder<List<Door>>(
+      stream: DoorRepository().watchMyDoors(uid),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final doors = snap.data ?? [];
+        if (doors.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFF1A1A1A),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('No doors yet.',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                const SizedBox(height: 6),
+                const Text('Create your first door and it will appear here.',
+                    style: TextStyle(color: Color(0xFF888888))),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/doors/create'),
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('Create door'),
+                ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          children: doors.take(8).map((door) {
+            final accent = _accentFor(door.typeSlug);
+            final isActive = door.status == DoorStatus.active;
+            return _DoorCard(
+              title: door.name,
+              subtitle: door.typeSlug.replaceAll('_', ' '),
+              status: isActive ? 'Active' : 'Inactive',
+              accent: accent,
+              onTap: () => context.push('/doors/${door.id}'),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }
