@@ -130,7 +130,7 @@ export default function Phase2Page() {
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-200">
             Quick actions
           </p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Operator launch board</h3>
+          <h3 className="mt-2 text-xl font-semibold text-white">Launch board</h3>
           <div className="mt-5 space-y-3">
             {actionBoard.map((action) => (
               <div

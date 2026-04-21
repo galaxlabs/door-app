@@ -21,6 +21,6 @@ class BroadcastRepository {
       },
     );
 
-    await _api.dio.post('/broadcast/deliveries/$deliveryId/ack/');
+    await _api.dio.post('broadcast/deliveries/$deliveryId/ack/');
   }
 }

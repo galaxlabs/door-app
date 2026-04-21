@@ -23,7 +23,7 @@ class ChatRepository {
       },
     );
 
-    await _api.dio.post('/chat/rooms/$roomId/messages/', data: {
+    await _api.dio.post('chat/rooms/$roomId/messages/', data: {
       'content': content,
       'message_type': 'text',
       'client_id': clientId,

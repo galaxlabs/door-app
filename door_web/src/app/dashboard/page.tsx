@@ -1,8 +1,20 @@
 import { AdminPage } from "@/components/dashboard/AdminPage";
 import Link from "next/link";
-import { BellRing, Building2, QrCode, Radio, Ticket } from "lucide-react";
+import { BellRing, Building2, DoorOpen, PlusSquare, QrCode, Radio, Ticket, User } from "lucide-react";
 
 const cards = [
+  {
+    title: "Doors",
+    body: "Browse active doors, see their current purpose and routing mode, and manage the entries that behave like the original D-App door list.",
+    href: "/dashboard/doors",
+    icon: DoorOpen,
+  },
+  {
+    title: "Create Door",
+    body: "Create a doorbell, clinic queue, checkpoint, or emergency door on top of the QR engine.",
+    href: "/dashboard/doors/create",
+    icon: PlusSquare,
+  },
   {
     title: "Queue Control",
     body: "Monitor live serving state, issue tokens from QR scans, and keep admin actions separate from scan routing.",
@@ -21,12 +33,18 @@ const cards = [
     href: "/dashboard/broadcast",
     icon: Radio,
   },
+  {
+    title: "Profile",
+    body: "Update your profile, visitor card, privacy controls, and meeting points.",
+    href: "/dashboard/profile",
+    icon: User,
+  },
 ];
 
 const ops = [
   { label: "Organizations", value: "Org, event, and group structure", icon: Building2 },
   { label: "Queues", value: "Live status, call-next, and token handling", icon: Ticket },
-  { label: "QR Engine", value: "Mode-driven routing and reusable payloads", icon: QrCode },
+  { label: "QR Codes", value: "Mode-driven routing and reusable payloads", icon: QrCode },
   { label: "Notifications", value: "In-app hooks for queue and broadcast events", icon: BellRing },
 ];
 
@@ -39,7 +57,7 @@ export default function DashboardPage() {
       stats={[
         { label: "Scope", value: "Phase 1", tone: "amber" },
         { label: "Mode", value: "Offline-first", tone: "teal" },
-        { label: "Stack", value: "Django + Next", tone: "neutral" },
+        { label: "Stack", value: "Backend + Web", tone: "neutral" },
       ]}
     >
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
@@ -69,7 +87,7 @@ export default function DashboardPage() {
           <div className="mt-5 space-y-4 text-sm leading-6 text-[var(--text-muted)]">
             <p>Identity, organizations, QR, queue, basic chat, broadcast, sync, audit, and notifications.</p>
             <p>Marketplace, payments, trust engine, and discovery remain outside this implementation layer.</p>
-            <p>The admin shell should help operators manage what is real now, not preview five future products at once.</p>
+            <p>The admin shell should help you manage what is real now, not preview five future products at once.</p>
           </div>
         </div>
       </section>

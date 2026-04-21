@@ -85,6 +85,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=200)
     avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
+    intro = models.CharField(max_length=240, blank=True, help_text="Short bio/intro line shown on profile.")
+    age = models.PositiveSmallIntegerField(null=True, blank=True)
     timezone = models.CharField(max_length=64, default="UTC")
     role = models.CharField(max_length=24, choices=ROLE_CHOICES, default="general_user")
     locale = models.CharField(max_length=5, choices=LOCALE_CHOICES, default="en")
@@ -148,6 +150,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.email = User.objects._normalize_email_value(self.email)
         self.phone_number = User.objects._normalize_phone_number(self.phone_number)
         self.full_name = (self.full_name or "").strip()
+        self.intro = (self.intro or "").strip()
         super().save(*args, **kwargs)
 
     @property
@@ -163,6 +166,21 @@ class User(AbstractBaseUser, PermissionsMixin):
     def mark_seen(self):
         self.last_seen_at = timezone.now()
         self.save(update_fields=["last_seen_at"])
+
+    def profile_setup_issues(self) -> list[str]:
+        issues: list[str] = []
+        if not (self.full_name or "").strip():
+            issues.append("full_name")
+        if not (self.phone_number or "").strip():
+            issues.append("phone_number")
+        email = (self.email or "").strip().lower()
+        if not email or email.endswith("@placeholder.door.local"):
+            issues.append("email")
+        return issues
+
+    @property
+    def is_profile_setup(self) -> bool:
+        return len(self.profile_setup_issues()) == 0
 
 
 # ---------------------------------------------------------------------------

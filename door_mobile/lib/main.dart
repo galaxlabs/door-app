@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
 
+import 'firebase_options.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/api/api_client.dart';
@@ -11,6 +13,7 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/broadcast/data/broadcast_repository.dart';
 import 'features/chat/data/chat_repository.dart';
 import 'features/notifications/data/notifications_repository.dart';
+import 'features/organizations/data/organizations_repository.dart';
 import 'features/qr/data/qr_repository.dart';
 import 'features/queue/data/queue_repository.dart';
 import 'features/sync/data/sync_local_repository.dart';
@@ -19,6 +22,9 @@ import 'features/sync/service/sync_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   if (!kIsWeb) {
     await LocalDatabase.instance();
   }
@@ -33,7 +39,7 @@ class DoorApp extends StatelessWidget {
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider(create: (_) => ApiClient()),
-        RepositoryProvider(create: (ctx) => AuthRepository(ctx.read<ApiClient>())),
+        RepositoryProvider(create: (_) => AuthRepository()),
         RepositoryProvider(create: (_) => SyncLocalRepository()),
         RepositoryProvider(create: (ctx) => SyncRemoteRepository(ctx.read<ApiClient>())),
         RepositoryProvider(
@@ -47,6 +53,7 @@ class DoorApp extends StatelessWidget {
         RepositoryProvider(create: (ctx) => ChatRepository(ctx.read<ApiClient>(), ctx.read<SyncLocalRepository>())),
         RepositoryProvider(create: (ctx) => BroadcastRepository(ctx.read<ApiClient>(), ctx.read<SyncLocalRepository>())),
         RepositoryProvider(create: (ctx) => NotificationsRepository(ctx.read<ApiClient>())),
+        RepositoryProvider(create: (ctx) => OrganizationsRepository(ctx.read<ApiClient>())),
       ],
       child: MaterialApp.router(
         title: 'Door App',

@@ -53,22 +53,43 @@ class TokenResponseSerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     phone = serializers.CharField(source="phone_number", read_only=True)
+    is_profile_setup = serializers.SerializerMethodField()
+    profile_setup_issues = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "public_id", "anonymous_id",
             "phone", "phone_number", "email", "full_name", "avatar",
+            "intro", "age",
             "role", "locale", "timezone",
             "is_phone_verified", "is_email_verified", "status", "is_active",
+            "is_profile_setup", "profile_setup_issues",
             "default_organization", "created_at_server", "updated_at_server",
         ]
         read_only_fields = [
             "id", "public_id", "anonymous_id",
             "phone", "phone_number", "email", "is_phone_verified", "is_email_verified",
             "status",
+            "is_profile_setup", "profile_setup_issues",
             "created_at_server", "updated_at_server",
         ]
+
+    def validate_age(self, value):
+        if value is None:
+            return value
+        if value < 1 or value > 120:
+            raise serializers.ValidationError(_("Age must be between 1 and 120."))
+        return value
+
+    def validate_intro(self, value):
+        return (value or "").strip()
+
+    def get_is_profile_setup(self, obj: User) -> bool:
+        return obj.is_profile_setup
+
+    def get_profile_setup_issues(self, obj: User) -> list[str]:
+        return obj.profile_setup_issues()
 
 
 class RegistrationSerializer(serializers.ModelSerializer):

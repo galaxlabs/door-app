@@ -4,7 +4,10 @@ from django.conf import settings
 from django.conf.urls.static import static
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
+from .api_root import ApiV1RootView
+
 api_v1 = [
+    path("", ApiV1RootView.as_view(), name="api-v1-root"),
     path("auth/", include("apps.auth_identity.urls")),
     path("organizations/", include("apps.organizations.urls")),
     path("qr/", include("apps.qr_engine.urls")),

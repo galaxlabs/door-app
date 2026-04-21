@@ -10,7 +10,7 @@ class SyncRemoteRepository {
     required String streamName,
     required List<Map<String, dynamic>> operations,
   }) async {
-    final res = await apiClient.dio.post('/sync/upload/', data: {
+    final res = await apiClient.dio.post('sync/upload/', data: {
       'device_id': deviceId,
       'stream_name': streamName,
       'operations': operations,
@@ -24,7 +24,7 @@ class SyncRemoteRepository {
     String since = '',
     required List<String> entityTypes,
   }) async {
-    final res = await apiClient.dio.post('/sync/pull/', data: {
+    final res = await apiClient.dio.post('sync/pull/', data: {
       'device_id': deviceId,
       'stream_name': streamName,
       'since': since,
@@ -34,7 +34,7 @@ class SyncRemoteRepository {
   }
 
   Future<void> ack({required String deviceId, required String cursor, List<String> ackedOutboxIds = const []}) async {
-    await apiClient.dio.post('/sync/ack/', data: {
+    await apiClient.dio.post('sync/ack/', data: {
       'device_id': deviceId,
       'cursor': cursor,
       'acked_outbox_ids': ackedOutboxIds,

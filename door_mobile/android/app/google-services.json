@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "426320258517",
+    "project_id": "door-22ef3",
+    "storage_bucket": "door-22ef3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:426320258517:android:56d6d5b4dfc66741a3895c",
+        "android_client_info": {
+          "package_name": "com.example.door_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "426320258517-rqk74bvtlfml3kenucf1aks5u9ga03ji.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAL9v45GGDwD7xPhVZLabFb5vD2vtefe8c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "426320258517-rqk74bvtlfml3kenucf1aks5u9ga03ji.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

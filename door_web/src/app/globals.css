@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  --font-ui-latin: "Roboto", "Ubuntu", "Carlito", "Calibri", "Segoe UI Variable", "Trebuchet MS", "Noto Sans", sans-serif;
+  --font-ui-arabic: "Noto Naskh Arabic", "Noto Sans Arabic", "Amiri", "Scheherazade New", serif;
+  --font-ui-urdu: "Jameel Noori Nastaleeq", "Noto Nastaliq Urdu", "Noto Naskh Arabic", "Urdu Typesetting", serif;
+
   --bg: #090909;
   --bg-elevated: #121212;
   --bg-panel: rgba(17, 17, 17, 0.82);
@@ -36,12 +40,20 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: "Trebuchet MS", "Segoe UI Variable", "Noto Sans Arabic", sans-serif;
+  font-family: var(--font-ui-latin);
   background:
     radial-gradient(circle at top left, rgba(246, 185, 74, 0.18), transparent 28%),
     radial-gradient(circle at top right, rgba(55, 214, 197, 0.14), transparent 22%),
     linear-gradient(180deg, #050505 0%, #0b0b0b 45%, #090909 100%);
   color: var(--text);
+}
+
+html[lang="ar"] body {
+  font-family: var(--font-ui-arabic);
+}
+
+html[lang="ur"] body {
+  font-family: var(--font-ui-urdu);
 }
 
 body::before {
@@ -63,6 +75,19 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
+}
+
+.font-latin {
+  font-family: var(--font-ui-latin);
+}
+
+.font-arabic {
+  font-family: var(--font-ui-arabic);
+}
+
+.font-urdu {
+  font-family: var(--font-ui-urdu);
 }

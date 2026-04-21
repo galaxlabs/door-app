@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../data/auth_repository.dart';
 
 class OtpScreen extends StatefulWidget {
   final String phone;
@@ -14,16 +12,11 @@ class OtpScreen extends StatefulWidget {
 class _OtpScreenState extends State<OtpScreen> {
   final _otpCtrl = TextEditingController();
   bool _loading = false;
+  String? _error;
 
   Future<void> _verify() async {
-    setState(() => _loading = true);
-    try {
-      final repo = RepositoryProvider.of<AuthRepository>(context);
-      await repo.verifyOtp(widget.phone, _otpCtrl.text.trim());
-      if (mounted) context.go('/home');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    // OTP via Firebase phone auth is not wired yet; redirect to login.
+    context.go('/login');
   }
 
   @override
@@ -49,11 +42,24 @@ class _OtpScreenState extends State<OtpScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
+                    if (_error != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0x22FF6D6D),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0x44FF6D6D)),
+                        ),
+                        child: Text(_error!, style: const TextStyle(color: Color(0xFFF7F0DC))),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: _otpCtrl,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 28, letterSpacing: 12),
+                      style: const TextStyle(fontSize: 26, letterSpacing: 8),
                       maxLength: 6,
                       decoration: const InputDecoration(
                         hintText: '6-digit code',

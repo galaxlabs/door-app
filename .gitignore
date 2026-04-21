@@ -15,6 +15,8 @@ logs/
 **/.env
 **/.env.*
 !**/.env.example
+**/firebase-service-account.json
+**/firebase-service-account.*.json
 
 # Python
 __pycache__/
@@ -50,3 +52,23 @@ build/
 **/android/local.properties
 **/ios/Pods/
 **/ios/.symlinks/
+
+# Django runtime artifacts
+door_backend/media/
+door_backend/staticfiles/
+
+# Local-only AI instruction packs (do not publish)
+00_DOOR_APP_MASTER_ROADMAP.md
+01_SCOPE_GUARDRAILS.md
+02_IMPLEMENTATION_INSTRUCTIONS.md
+03_PHASE_WISE_PROMPTS.md
+04_EXISTING_APP_REWRITE_PLAN.md
+05_COMPLETE_APP_FEATURES.md
+APP_PORTS_AND_PATHS.md
+
+# Local memory/error notes (do not publish)
+MEMORY.md
+PROJECT_MEMORY.md
+PROJECT_STATUS.md
+error.md
+errors.md

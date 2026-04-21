@@ -3,7 +3,7 @@ from django.db.models import Q
 from rest_framework import viewsets, views, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.organizations.models import Event, Group, Organization
 from apps.queue_control.models import Queue
@@ -85,6 +85,14 @@ class QRCodeViewSet(viewsets.ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
+        issues = getattr(self.request.user, "profile_setup_issues", lambda: [])()
+        if issues:
+            raise ValidationError(
+                {
+                    "detail": "Complete your profile setup before creating a door.",
+                    "errors": issues,
+                }
+            )
         serializer.save(created_by=self.request.user)
 
     @action(detail=True, methods=["get", "post"], url_path="owner-members")
@@ -208,6 +216,11 @@ class TemplatePackAdminSetupView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        if hasattr(request.user, "is_profile_setup") and not request.user.is_profile_setup:
+            return Response(
+                {"detail": "Complete profile setup before creating doors.", "issues": request.user.profile_setup_issues()},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = TemplatePackAdminSetupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data

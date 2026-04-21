@@ -11,7 +11,7 @@ class QueueRepository {
     required String queueId,
     required String deviceId,
   }) async {
-    final res = await _api.dio.post('/queues/$queueId/join/', data: {'device_id': deviceId});
+    final res = await _api.dio.post('queues/$queueId/join/', data: {'device_id': deviceId});
     final data = Map<String, dynamic>.from(res.data as Map);
 
     await _local.enqueue(
@@ -22,5 +22,20 @@ class QueueRepository {
     );
 
     return data;
+  }
+
+  Future<List<Map<String, dynamic>>> listQueues() async {
+    final res = await _api.dio.get('queues/');
+    if (res.data is List) {
+      return (res.data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    if (res.data is Map<String, dynamic>) {
+      final root = Map<String, dynamic>.from(res.data as Map);
+      final candidate = root['results'] ?? root['items'] ?? root['data'];
+      if (candidate is List) {
+        return candidate.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      }
+    }
+    return const [];
   }
 }
