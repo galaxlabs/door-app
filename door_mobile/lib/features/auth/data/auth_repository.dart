@@ -11,9 +11,15 @@ class AuthRepository {
 
   Future<UserCredential> signInWithGoogle() async {
     if (kIsWeb) {
-      // Web: use Firebase popup flow
-      final provider = GoogleAuthProvider();
-      return _auth.signInWithPopup(provider);
+      // Web: use Firebase popup flow (requires domain in Firebase Auth authorized list)
+      try {
+        final provider = GoogleAuthProvider();
+        return await _auth.signInWithPopup(provider);
+      } catch (e) {
+        // Fallback: redirect flow (works on any domain)
+        await _auth.signInWithRedirect(GoogleAuthProvider());
+        return await _auth.getRedirectResult();
+      }
     }
     // Mobile: native Google sign-in
     final account = await _googleSignIn.signIn();

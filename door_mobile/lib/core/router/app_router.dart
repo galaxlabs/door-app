@@ -1,4 +1,6 @@
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
@@ -28,6 +30,21 @@ class AppRouter {
   static final router = GoRouter(
     initialLocation: '/login',
     errorBuilder: (_, __) => const HomeScreen(),
+    redirect: (context, state) {
+      final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+      final isLoginOrRegister = state.matchedLocation == '/login' ||
+          state.matchedLocation == '/register';
+
+      // If signed in and heading to login/register → send home
+      if (isLoggedIn && isLoginOrRegister) return '/home';
+      // If not signed in and heading to a protected route → send to login
+      // (but allow /login, /register, /scan — scanner is guest-accessible)
+      if (!isLoggedIn && !isLoginOrRegister && state.matchedLocation != '/scan') {
+        // Allow guest on home and scan
+        if (state.matchedLocation == '/home') return null;
+      }
+      return null;
+    },
     routes: [
       GoRoute(path: '/', redirect: (_, __) => '/home'),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
